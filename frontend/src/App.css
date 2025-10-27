@@ -1,0 +1,223 @@
+/* Add this to your main CSS file (e.g., src/App.css or src/LiquidEther.css) */
+html, body {
+    height: 100%;
+    /* Ensure no default padding/margins interfere */
+    margin: 0; 
+    padding: 0;
+}
+.liquid-ether-container {
+    /* 1. Positioning and Sizing */
+    position: fixed !important; /* Forces it to cover the viewport */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    
+    /* 2. Layering */
+     /* Ensures it is behind the .overlay (-1) and the .main-card (10) */
+    
+    /* 3. Visibility Check (Start with 1.0, then lower it for subtlety) */
+    opacity: 1; /* Set to 1.0 temporarily for testing */
+}
+
+/* Ensure the canvas element inside the container takes up the full space */
+.liquid-ether-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+
+
+/* src/App.css */
+
+/* Global Styles */
+:root {
+  --color-dark-bg: #12121e; /* Dark Navy/Gray background */
+  --color-card-bg: rgba(255, 255, 255, 0.05); /* Semi-transparent card */
+  --color-text-light: #f0f0f5;
+  --color-primary: #00bcd4; /* Medium Blue/Turquoise for branding */
+  --color-reliable: #4caf50; /* Green */
+  --color-unreliable: #f44336; /* Red */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --spacing-large: 2rem;
+}
+
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: var(--color-dark-bg);
+  color: var(--color-text-light);
+}
+
+/* --- Layout and Centering --- */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-large);
+  position:relative;
+  left: 92%;
+}
+
+/* Semi-transparent Overlay (on top of Liquid Ether BG) */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1; /* Below content, above Liquid Ether */
+  background: rgba(18, 18, 30, 0.6); /* Slightly darker overlay for contrast */
+}
+
+.main-card {
+  width: 100%;
+  max-width: 800px;
+  background: var(--color-card-bg);
+  padding: var(--spacing-large);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border: 1px solid var(--color-border);
+  z-index: 10; /* Ensures content is on top */
+}
+
+/* --- Header --- */
+.header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-primary);
+}
+
+.header p {
+  font-size: 1.1rem;
+  margin-top: 0;
+  margin-bottom: var(--spacing-large);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* --- Form Fields --- */
+.prediction-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.input-field, .textarea-field {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-light);
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.input-field:focus, .textarea-field:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.textarea-field {
+  resize: vertical;
+  min-height: 200px;
+}
+
+/* --- Submit Button --- */
+.submit-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background-color: var(--color-primary);
+  color: var(--color-dark-bg);
+  font-size: 1.1rem;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s, opacity 0.3s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #00e5ff;
+}
+
+.submit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Result Display --- */
+.result-container {
+  margin-top: var(--spacing-large);
+  padding: var(--spacing-large);
+  border-radius: 8px;
+  text-align: center;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.result-container.reliable {
+  background-color: rgba(76, 175, 80, 0.15); /* Light Green BG */
+  border: 1px solid var(--color-reliable);
+}
+
+.result-container.unreliable {
+  background-color: rgba(244, 67, 54, 0.15); /* Light Red BG */
+  border: 1px solid var(--color-unreliable);
+}
+
+.status-text {
+  font-size: 2rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.green { color: var(--color-reliable); }
+.red { color: var(--color-unreliable); }
+
+.icon { margin-bottom: 0.5rem; }
+
+/* Loading Spinner */
+.result-container.loading {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .main-card {
+    padding: 1.5rem;
+  }
+  .header h1 {
+    font-size: 2rem;
+  }
+  .status-text {
+    font-size: 1.5rem;
+  }
+}

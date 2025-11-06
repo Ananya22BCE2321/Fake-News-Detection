@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { FaCheckCircle, FaTimesCircle, FaSpinner } from 'react-icons/fa';
-import type { PredictionResult } from '../types';
+// Importing the new type structure
+import type { AnalysisResult } from '../types'; 
 
 interface ResultDisplayProps {
-  result: PredictionResult;
+  result: AnalysisResult | null; // Now accepts the full analysis object
   isLoading: boolean;
 }
 
@@ -25,31 +26,42 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result, isLoading }) => {
     return null;
   }
 
-  if (result === 0) {
-    return (
-      <div className="result-container reliable">
-        <div className="icon check-icon">
-          <FaCheckCircle size={64} />
-        </div>
-        <h1 className="status-text green">Status: Reliable</h1>
-        <p>The model classifies this article as reliable.</p>
+  // --- Logic for Confidence Score ---
+  const isReliable = result.prediction === 'Reliable';
+  
+  // The backend's probability is the score for 'Unreliable' (Class 1).
+  // We calculate the final confidence in the predicted label.
+  const rawConfidence = isReliable 
+    ? (1 - result.probability) 
+    : result.probability; 
+  
+  const confidencePercent = (rawConfidence * 100).toFixed(2);
+  
+  const label = result.prediction;
+  
+  // --- Styling and Content ---
+  const containerClass = isReliable ? 'reliable' : 'unreliable';
+  const icon = isReliable ? <FaCheckCircle size={64} /> : <FaTimesCircle size={64} />;
+  const statusClass = isReliable ? 'green' : 'red';
+  
+  return (
+    <div className={`result-container ${containerClass}`}>
+      <div className={`icon ${isReliable ? 'check-icon' : 'times-icon'}`}>
+        {icon}
       </div>
-    );
-  }
-
-  if (result === 1) {
-    return (
-      <div className="result-container unreliable">
-        <div className="icon times-icon">
-          <FaTimesCircle size={64} />
-        </div>
-        <h1 className="status-text red">Status: Unreliable</h1>
-        <p>The model classifies this article as unreliable (fake news).</p>
+      <h1 className={`status-text ${statusClass}`}>Status: {label}</h1>
+      <p className="summary-text">
+        The model classifies this article as **{label.toLowerCase()}**.
+      </p>
+      {/* IMPROVED CONFIDENCE SCORE DISPLAY */}
+      <div className="confidence-score-box">
+        <strong className="confidence-percent-text">{confidencePercent}%</strong>
+        <p className="confidence-detail">
+          Confidence Score for the **{label}** classification.
+        </p>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 };
 
 export default ResultDisplay;

@@ -6,13 +6,16 @@ export interface PredictionRequest {
   text: string;
 }
 
-// Define the shape of the data received from the backend
-// Assuming the backend returns 0 for Reliable and 1 for Unreliable
-export type PredictionResult = 0 | 1 | null; // null for initial state
+// Define the shape of the data received from the backend's prediction endpoints
+export interface AnalysisResult {
+  prediction: 'Reliable' | 'Unreliable';
+  probability: number; // The confidence score (0.0 to 1.0) for the 'Unreliable' class
+}
 
 // Define the overall state of the application
 export interface AppState {
-  result: PredictionResult;
+  // result now holds the full analysis object, or null
+  result: AnalysisResult | null; 
   isLoading: boolean;
   error: string | null;
 }

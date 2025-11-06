@@ -1,7 +1,4 @@
 # Fake News Detection Analysis - LSTM Classification
-
-
-
 # Dataset Information
 
 Develop a Deep learning program to identify when an article might be fake news.
@@ -14,8 +11,6 @@ Develop a Deep learning program to identify when an article might be fake news.
 - label: a label that marks the article as potentially unreliable
     - 1: unreliable
     - 0: reliable
-
-
 # Libraries
 
 - pandas

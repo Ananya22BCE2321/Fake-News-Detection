@@ -1,18 +1,19 @@
 // src/types.ts
 
-// Define the shape of the data sent to the backend
-export interface PredictionRequest {
-  title: string;
-  text: string;
+/**
+ * The shape of the analysis result object returned from the backend
+ * and expected by the ResultDisplay component.
+ */
+export interface AnalysisResult {
+  prediction: 'Reliable' | 'Unreliable';
+  probability: number;
 }
 
-// Define the shape of the data received from the backend
-// Assuming the backend returns 0 for Reliable and 1 for Unreliable
-export type PredictionResult = 0 | 1 | null; // null for initial state
-
-// Define the overall state of the application
+/**
+ * The main state for the App component.
+ */
 export interface AppState {
-  result: PredictionResult;
+  result: AnalysisResult | null;
   isLoading: boolean;
   error: string | null;
 }

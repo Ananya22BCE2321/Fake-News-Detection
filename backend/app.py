@@ -3,22 +3,26 @@ import re
 import pickle
 import numpy as np
 from flask import Flask, request, jsonify
-from flask_cors import CORS # FIX: Added the necessary import
+from flask_cors import CORS
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from nltk.corpus import stopwords
 from werkzeug.utils import secure_filename
-import string
+import requests
+from bs4 import BeautifulSoup
+import PyPDF2
+from io import BytesIO
 
 # --- 1. SETUP ---
 app = Flask(__name__)
-CORS(app) 
-UPLOAD_FOLDER = '/tmp/uploads' # Temporary folder for file uploads
+CORS(app)
+UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# --- 2. CONFIGURATION (Matches Notebook Logic) ---
-MAX_LEN = 200  # Check the max sequence length used during training
+# --- 2. CONFIGURATION ---
+MAX_LEN = 200
 STOP_WORDS = set(stopwords.words('english'))
 ALLOWED_EXTENSIONS = {'pdf'}
 
@@ -32,173 +36,274 @@ try:
     model = load_model(MODEL_PATH)
     with open(TOKENIZER_PATH, 'rb') as handle:
         tokenizer = pickle.load(handle)
-    print(f"Model loaded from {MODEL_PATH}")
-    print(f"Tokenizer loaded from {TOKENIZER_PATH}")
+    print(f"✓ Model loaded from {MODEL_PATH}")
+    print(f"✓ Tokenizer loaded from {TOKENIZER_PATH}")
 except Exception as e:
-    # This error was fixed by moving the files to the backend folder
-    print(f"Error loading model or tokenizer: {e}") 
+    print(f"✗ Error loading model or tokenizer: {e}")
+    print("Please ensure lstm_model.h5 and tokenizer.pkl are in the backend directory")
 
-
-# --- 4. PREPROCESSING & HELPER FUNCTIONS ---
+# --- 4. PREPROCESSING FUNCTIONS ---
 
 def clean_text(text: str) -> str:
     """Applies the same cleaning steps as performed in the notebook."""
-    if not isinstance(text, str):
+    if not isinstance(text, str) or not text:
         return ""
-        
-    # 1. Lowercase
+    
+    # Lowercase
     text = text.lower()
     
-    # 2. Remove punctuation and special characters (using regex from notebook)
+    # Remove special characters/punctuation
     text = re.sub(r'[^A-Za-z0-9\s]', '', text)
     
-    # 3. Remove newlines and extra spaces
+    # Remove newlines and extra spaces
     text = re.sub(r'\n', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # 4. Remove stopwords
+    # Remove stopwords
     words = text.split()
     text = " ".join([word for word in words if word not in STOP_WORDS])
-    
-    # NOTE: If your final model training in the notebook included NLTK Stemming 
-    # (as suggested by a snippet from a detector.py file), you must uncomment 
-    # and import the stemmer here to ensure consistent preprocessing.
     
     return text
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- PLACEHOLDER FUNCTIONS FOR EXTERNAL DATA SOURCES ---
-# REMINDER: You must replace these placeholders with real implementations 
-# using requests/BeautifulSoup for URLs and PyPDF2/pdfminer.six for PDFs.
+# --- 5. CONTENT EXTRACTION FUNCTIONS ---
 
 def get_text_from_url(url: str) -> str:
-    """
-    *** Placeholder Function ***
-    Simulates fetching and scraping text from a URL.
-    """
-    if "fake-example.com" in url:
-        return "BREAKING: Scientists have discovered that eating broccoli makes you instantly rich. This is definitely not fake news."
-    elif "real-example.com" in url:
-        return "Experts from the World Health Organization published a report on current pandemic trends, noting the importance of vaccination."
-    else:
-        # Simulate a scrape
-        print(f"Simulating scrape for URL: {url}")
-        return "The recent developments in the global market show a 1.5% rise in tech stocks, driven by quarterly earnings reports from major corporations."
+    """Extract text content from a URL using web scraping."""
+    try:
+        # Add headers to mimic a real browser
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        # Validate URL format
+        if not url.startswith(('http://', 'https://')):
+            raise ValueError("URL must start with http:// or https://")
+        
+        # Fetch the webpage with timeout
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # Parse HTML content
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+            script.decompose()
+        
+        # Get text from article, main content, or body
+        content = None
+        
+        # Try to find article content
+        for selector in ['article', 'main', '.article-content', '.post-content', '[role="main"]']:
+            content = soup.select_one(selector)
+            if content:
+                break
+        
+        # Fallback to body if no specific content found
+        if not content:
+            content = soup.find('body')
+        
+        if not content:
+            raise ValueError("Could not extract text content from the page")
+        
+        # Extract and clean text
+        text = content.get_text(separator=' ', strip=True)
+        
+        # Remove excessive whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        if len(text) < 100:
+            raise ValueError("Extracted text is too short (less than 100 characters)")
+        
+        return text
+        
+    except requests.exceptions.Timeout:
+        raise Exception("Request timed out. The website took too long to respond.")
+    except requests.exceptions.ConnectionError:
+        raise Exception("Failed to connect to the URL. Please check your internet connection.")
+    except requests.exceptions.HTTPError as e:
+        raise Exception(f"HTTP error occurred: {e}")
+    except Exception as e:
+        raise Exception(f"Failed to extract text from URL: {str(e)}")
 
-def get_text_from_pdf(filepath: str) -> str:
-    """
-    *** Placeholder Function ***
-    Simulates extracting text from an uploaded PDF file.
-    """
-    # Simulate PDF text extraction
-    if os.path.basename(filepath) == "unreliable.pdf":
-        return "PDF Source: Shocking new documents reveal that all world leaders are secretly aliens working for a shadow government."
-    else:
-        return "PDF Source: A detailed analysis of the quarterly financial reports, as mandated by the regulatory body, shows compliance with all required benchmarks and disclosures."
+def get_text_from_pdf(file_storage) -> str:
+    """Extract text from an uploaded PDF file."""
+    try:
+        # Read PDF from file storage
+        pdf_reader = PyPDF2.PdfReader(file_storage)
+        
+        if len(pdf_reader.pages) == 0:
+            raise ValueError("PDF file is empty")
+        
+        # Extract text from all pages
+        text = ""
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text() + " "
+        
+        # Clean up the text
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        if len(text) < 100:
+            raise ValueError("Extracted text is too short (less than 100 characters)")
+        
+        return text
+        
+    except PyPDF2.errors.PdfReadError:
+        raise Exception("Invalid or corrupted PDF file")
+    except Exception as e:
+        raise Exception(f"Failed to extract text from PDF: {str(e)}")
 
-# --- 5. PREDICTION ENDPOINTS ---
+# --- 6. PREDICTION LOGIC ---
+
+def make_prediction(raw_text: str):
+    """Common prediction logic used by all endpoints."""
+    if not raw_text or len(raw_text.strip()) < 10:
+        raise ValueError("Text is too short for analysis (minimum 10 characters)")
+    
+    # Apply preprocessing
+    cleaned = clean_text(raw_text)
+    
+    if not cleaned:
+        raise ValueError("After preprocessing, no valid text remains")
+    
+    # Convert text to sequence and pad
+    sequence = tokenizer.texts_to_sequences([cleaned])
+    padded = pad_sequences(sequence, maxlen=MAX_LEN, padding='post', truncating='post')
+    
+    # Make prediction
+    prediction = model.predict(padded, verbose=0)
+    probability = float(prediction[0][0])
+    
+    # ASSUMPTION: probability > 0.5 = Unreliable, <= 0.5 = Reliable
+    predicted_label = "Unreliable" if probability > 0.5 else "Reliable"
+    
+    return predicted_label, probability
+
+# --- 7. API ENDPOINTS ---
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    return jsonify({
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "tokenizer_loaded": tokenizer is not None
+    })
 
 @app.route('/predict', methods=['POST'])
 def predict_text():
-    """Endpoint for direct text input analysis (from the existing App.tsx)."""
+    """Endpoint for direct text input analysis."""
     if model is None or tokenizer is None:
-        return jsonify({"error": "Model or tokenizer not loaded."}), 500
-        
-    data = request.get_json()
-    # The frontend is sending 'text' in the request body (title is optional)
-    raw_text = data.get('text', '')
+        return jsonify({"error": "Model or tokenizer not loaded. Please check server logs."}), 503
     
-    if not raw_text.strip():
-        return jsonify({"error": "No text provided for analysis."}), 400
-
     try:
-        # 1. Apply Preprocessing
-        cleaned = clean_text(raw_text)
-
-        # 2. Convert text to sequence and pad
-        sequence = tokenizer.texts_to_sequences([cleaned])
-        padded = pad_sequences(sequence, maxlen=MAX_LEN)
-
-        # 3. Make the prediction
-        prediction = model.predict(padded)
+        data = request.get_json()
         
-        # ASSUMPTION: 1=Unreliable, 0=Reliable 
-        predicted_label = "Unreliable" if prediction[0][0] >= 0.5 else "Reliable"
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
         
-        print(f"Text Analysis - Cleaned: {cleaned[:50]}...")
-        print(f"Prediction: {prediction[0][0]}, Label: {predicted_label}")
-
-        return jsonify({ 
-            "prediction": predicted_label, 
-            "probability": float(prediction[0][0])
+        title = data.get('title', '')
+        text = data.get('text', '')
+        
+        # Combine title and text
+        raw_text = f"{title}\n\n{text}" if title else text
+        
+        if not raw_text.strip():
+            return jsonify({"error": "No text provided for analysis"}), 400
+        
+        # Make prediction
+        predicted_label, probability = make_prediction(raw_text)
+        
+        print(f"✓ Text Analysis - Label: {predicted_label}, Probability: {probability:.4f}")
+        
+        return jsonify({
+            "prediction": predicted_label,
+            "probability": probability
         })
+        
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        print(f"Prediction execution failed: {e}")
-        return jsonify({"error": f"Internal server error: {e}"}), 500
+        print(f"✗ Prediction failed: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/analyze_remote', methods=['POST'])
-def predict_remote():
+def analyze_remote():
     """Unified endpoint for URL and PDF analysis."""
     if model is None or tokenizer is None:
-        return jsonify({"error": "Model or tokenizer not loaded."}), 500
-        
-    raw_text = None
-    source_type = None
-
-    if 'url' in request.form:
-        source_type = 'URL'
-        url = request.form.get('url')
-        if not url:
-            return jsonify({"error": "No URL provided."}), 400
-        try:
-            raw_text = get_text_from_url(url)
-        except Exception as e:
-            return jsonify({"error": f"Failed to fetch content from URL: {e}"}), 500
-
-    elif 'file' in request.files:
-        source_type = 'PDF'
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"error": "No file selected."}), 400
-        if file and allowed_file(file.filename):
-            try:
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                raw_text = get_text_from_pdf(filepath)
-                os.remove(filepath) # Clean up the temporary file
-            except Exception as e:
-                return jsonify({"error": f"Failed to process PDF file: {e}"}), 500
-        else:
-            return jsonify({"error": "Invalid file type. Only PDF is supported."}), 400
-
-    if not raw_text:
-        return jsonify({"error": "Could not extract or retrieve text for analysis."}), 400
-
-    # Perform the prediction on the extracted raw_text
+        return jsonify({"error": "Model or tokenizer not loaded. Please check server logs."}), 503
+    
     try:
-        cleaned = clean_text(raw_text)
-        sequence = tokenizer.texts_to_sequences([cleaned])
-        padded = pad_sequences(sequence, maxlen=MAX_LEN)
-        prediction = model.predict(padded)
+        raw_text = None
+        source_type = None
         
-        predicted_label = "Unreliable" if prediction[0][0] >= 0.5 else "Reliable"
+        # Check if URL is provided
+        if 'url' in request.form:
+            source_type = 'URL'
+            url = request.form.get('url', '').strip()
+            
+            if not url:
+                return jsonify({"error": "URL cannot be empty"}), 400
+            
+            print(f"→ Processing URL: {url}")
+            raw_text = get_text_from_url(url)
+            print(f"✓ Extracted {len(raw_text)} characters from URL")
         
-        print(f"{source_type} Analysis - Cleaned: {cleaned[:50]}...")
-        print(f"Prediction: {prediction[0][0]}, Label: {predicted_label}")
-
-        return jsonify({ 
-            "prediction": predicted_label, 
-            "probability": float(prediction[0][0])
+        # Check if PDF file is provided
+        elif 'file' in request.files:
+            source_type = 'PDF'
+            file = request.files['file']
+            
+            if file.filename == '':
+                return jsonify({"error": "No file selected"}), 400
+            
+            if not allowed_file(file.filename):
+                return jsonify({"error": "Invalid file type. Only PDF files are supported"}), 400
+            
+            print(f"→ Processing PDF: {file.filename}")
+            raw_text = get_text_from_pdf(file)
+            print(f"✓ Extracted {len(raw_text)} characters from PDF")
+        
+        else:
+            return jsonify({"error": "No URL or file provided"}), 400
+        
+        # Make prediction
+        predicted_label, probability = make_prediction(raw_text)
+        
+        print(f"✓ {source_type} Analysis - Label: {predicted_label}, Probability: {probability:.4f}")
+        
+        return jsonify({
+            "prediction": predicted_label,
+            "probability": probability,
+            "source_type": source_type
         })
+        
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        print(f"Prediction execution failed: {e}")
-        return jsonify({"error": f"Internal prediction error: {e}"}), 500
+        print(f"✗ Analysis failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
-# --- 6. RUN SERVER ---
+# --- 8. ERROR HANDLERS ---
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({"error": "File too large. Maximum size is 16MB"}), 413
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({"error": "Internal server error occurred"}), 500
+
+# --- 9. RUN SERVER ---
 if __name__ == '__main__':
-    # Running on port 5000, as configured in App.tsx
-    app.run(port=5000, debug=True)
+    print("\n" + "="*50)
+    print("FactCheck AI Backend Server")
+    print("="*50)
+    print(f"Model Status: {'✓ Loaded' if model else '✗ Not Loaded'}")
+    print(f"Tokenizer Status: {'✓ Loaded' if tokenizer else '✗ Not Loaded'}")
+    print("="*50 + "\n")
+    app.run(host='0.0.0.0', port=5000, debug=True)

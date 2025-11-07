@@ -69,14 +69,19 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- 5. CONTENT EXTRACTION FUNCTIONS ---
-
 def get_text_from_url(url: str) -> str:
     """Extract text content from a URL using web scraping."""
     try:
-        # Add headers to mimic a real browser
+        # --- THIS IS THE FIX ---
+        # We are using more headers to look like a real browser
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive'
         }
+        # --- END OF FIX ---
         
         # Validate URL format
         if not url.startswith(('http://', 'https://')):
@@ -128,7 +133,6 @@ def get_text_from_url(url: str) -> str:
         raise Exception(f"HTTP error occurred: {e}")
     except Exception as e:
         raise Exception(f"Failed to extract text from URL: {str(e)}")
-
 def get_text_from_pdf(file_storage) -> str:
     """Extract text from an uploaded PDF file."""
     try:

@@ -5,6 +5,7 @@ html, body {
     margin: 0; 
     padding: 0;
 }
+
 .liquid-ether-container {
     /* 1. Positioning and Sizing */
     position: fixed !important; /* Forces it to cover the viewport */
@@ -63,7 +64,7 @@ body {
   align-items: center;
   padding: var(--spacing-large);
   position:relative;
-  left: 92%;
+  left: 120%;
 }
 
 /* Semi-transparent Overlay (on top of Liquid Ether BG) */
